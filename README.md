@@ -43,7 +43,9 @@ Pokémon Center / Target / Walmart 재고를 자동 감시해서
 
 ## 3단계 — 항상 켜진 컴퓨터에 체커 설치 (10분)
 
-> Windows 기준 (Mac/Linux는 `run_checker.sh` 사용)
+> Windows 기준 (Mac/Linux는 `setup_mac.sh` / `run_checker.sh` 사용)
+>
+> **빠른 길**: Python과 Git만 설치돼 있으면, repo를 clone한 뒤 **`setup_windows.bat` 더블클릭 한 번**으로 아래 4~5단계가 자동으로 끝나요.
 
 1. [Python 설치](https://www.python.org/downloads/) — 설치 시 **"Add Python to PATH" 체크 필수!**
 2. 이 repo를 그 컴퓨터에 clone (또는 zip 다운로드 후 git 연결):
