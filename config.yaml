@@ -9,14 +9,14 @@
 #    친구들도 같은 topic을 구독하면 똑같이 알림을 받아요.
 ntfy:
   server: https://ntfy.sh
-  topic: pkmn-restock-CHANGE-ME-8f3k2   # ← 꼭 바꾸세요 (영문/숫자/하이픈)
+  topic: pkmn-restock-pang-i96vygqb   # 이 이름으로 ntfy 앱에서 구독하세요
   enabled: true
 
 # ---- 대시보드 (GitHub Pages) --------------------------------
 dashboard:
   title: "포켓몬 카드 리스톡 트래커"
   # 배포 후 본인 GitHub Pages 주소로 변경 (알림 클릭 시 열릴 링크)
-  url: "https://YOUR-GITHUB-ID.github.io/pokemon-restock-tracker/"
+  url: "https://pangpanggit.github.io/pokemon-restock-tracker/"
 
 # ---- Pokémon Center -----------------------------------------
 pokemoncenter:

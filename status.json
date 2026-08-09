@@ -2,8 +2,10 @@
  "version": 1,
  "initial_sample": true,
  "generated_at": "2026-08-09T00:00:00+00:00",
- "dashboard": {"title": "포켓몬 카드 리스톡 트래커"},
- "ntfy_topic": "pkmn-restock-CHANGE-ME-8f3k2",
+ "dashboard": {
+  "title": "포켓몬 카드 리스톡 트래커"
+ },
+ "ntfy_topic": "pkmn-restock-pang-i96vygqb",
  "sites": {
   "pokemoncenter": {
    "label": "Pokémon Center",
@@ -77,7 +79,17 @@
     }
    }
   },
-  "target": {"label": "Target", "ok": null, "checked_at": null, "items": []},
-  "walmart": {"label": "Walmart", "ok": null, "checked_at": null, "items": []}
+  "target": {
+   "label": "Target",
+   "ok": null,
+   "checked_at": null,
+   "items": []
+  },
+  "walmart": {
+   "label": "Walmart",
+   "ok": null,
+   "checked_at": null,
+   "items": []
+  }
  }
 }
