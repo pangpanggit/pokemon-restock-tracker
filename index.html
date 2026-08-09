@@ -96,12 +96,14 @@ footer{margin-top:40px;text-align:center;font-size:12px;color:var(--dim)}
   <div class="logo live"><div class="pokeball"></div><span id="title">포켓몬 카드 리스톡 트래커</span></div>
   <button class="btn" id="notifBtn" onclick="toggleNotif()">🔔 브라우저 알림 켜기</button>
   <button class="btn" id="soundBtn" onclick="toggleSound()">🔊 소리 알림</button>
-  <div class="meta">마지막 갱신 <b id="updated">—</b><br><span id="refreshInfo">30초마다 자동 새로고침</span></div>
+  <button class="btn" id="refreshBtn" onclick="manualRefresh()">🔄 새로고침</button>
+  <div class="meta">데이터 갱신 <b id="updated">—</b><br><span id="refreshInfo">30초마다 자동 확인</span></div>
 </div></header>
 
 <div class="wrap">
   <div class="notice" id="sampleNotice">⚠️ 초기 샘플 데이터입니다 — 체커(check.py)를 실행하면 전체 상품 목록으로 자동 갱신돼요.</div>
   <div class="notice" id="errNotice"></div>
+  <div class="notice" id="staleNotice"></div>
   <div class="stockbar" id="stockbar"></div>
 
   <!-- 30주년 주력 -->
@@ -186,6 +188,13 @@ function render(){
   document.title=(DATA.dashboard||{}).title||'포켓몬 카드 리스톡 트래커';
   document.getElementById('updated').textContent=fmtTime(DATA.generated_at);
   document.getElementById('sampleNotice').classList.toggle('show', !!DATA.initial_sample);
+  // 데이터 신선도 경고 (체커 미가동 감지)
+  const sn=document.getElementById('staleNotice');
+  const ageMin=Math.floor((Date.now()-new Date(DATA.generated_at).getTime())/60000);
+  if(!DATA.initial_sample && ageMin>30){
+    sn.textContent=`⏸ 마지막 데이터가 ${ageMin>=60?Math.floor(ageMin/60)+'시간 '+(ageMin%60)+'분':ageMin+'분'} 전 거예요 — 체커 컴퓨터가 꺼져있거나 멈췄을 수 있어요.`;
+    sn.classList.add('show');
+  } else sn.classList.remove('show');
   const tc=document.getElementById('topicCode'); tc.textContent=DATA.ntfy_topic||'(config에서 설정)';
 
   // hero: 우선(30th) 상품
@@ -270,6 +279,14 @@ function fireAlerts(items){
   }
   firstLoad=false;
 }
+async function manualRefresh(){
+  const b=document.getElementById('refreshBtn');
+  if(b.disabled) return;
+  b.disabled=true; const o='🔄 새로고침'; b.textContent='⏳ 확인 중…';
+  await load();
+  b.textContent='✓ 최신 확인됨';
+  setTimeout(()=>{b.textContent=o;b.disabled=false},1200);
+}
 function copyTopic(){
   const t=document.getElementById('topicCode').textContent;
   navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>{
@@ -284,6 +301,7 @@ async function load(){
     if(!r.ok) throw new Error('HTTP '+r.status);
     DATA=await r.json();
     document.getElementById('errNotice').classList.remove('show');
+    document.getElementById('refreshInfo').textContent='30초 자동 · 방금 확인 '+new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   }catch(e){
     if(!DATA && EMBEDDED) DATA=EMBEDDED;
     const en=document.getElementById('errNotice');
