@@ -1,0 +1,64 @@
+# ============================================================
+# 포켓몬 카드 리스톡 체커 설정
+# ============================================================
+
+# ---- 폰 푸시 알림 (ntfy.sh — 무료) ----------------------------
+# 1) 폰에 "ntfy" 앱 설치 (App Store / Play Store)
+# 2) 앱에서 아래 topic 이름으로 구독(Subscribe)
+# 3) topic은 비밀번호 같은 것! 유추 어려운 이름으로 바꿔 쓰세요.
+#    친구들도 같은 topic을 구독하면 똑같이 알림을 받아요.
+ntfy:
+  server: https://ntfy.sh
+  topic: pkmn-restock-CHANGE-ME-8f3k2   # ← 꼭 바꾸세요 (영문/숫자/하이픈)
+  enabled: true
+
+# ---- 대시보드 (GitHub Pages) --------------------------------
+dashboard:
+  title: "포켓몬 카드 리스톡 트래커"
+  # 배포 후 본인 GitHub Pages 주소로 변경 (알림 클릭 시 열릴 링크)
+  url: "https://YOUR-GITHUB-ID.github.io/pokemon-restock-tracker/"
+
+# ---- Pokémon Center -----------------------------------------
+pokemoncenter:
+  enabled: true
+  categories:
+    - id: elite-trainer-box
+      label: "엘리트 트레이너 박스"
+    - id: booster-packs
+      label: "부스터 팩"
+    - id: boxed-sets
+      label: "박스 세트"
+  # 이 키워드가 이름에 있으면 "주력 상품"으로 취급 (대시보드 상단 고정 + 우선 알림)
+  priority_keywords: ["30th"]
+  # 품절→재고 전환뿐 아니라, 신상품(새 코드)이 등장해도 알림
+  notify_new_products: true
+
+# ---- Target -------------------------------------------------
+# 노리는 상품의 페이지 URL을 넣으세요. (예시는 지우고 실제 URL로)
+target:
+  enabled: true
+  products: []
+    # - name: "Pokemon TCG: 30th Celebration ETB"
+    #   url: "https://www.target.com/p/-/A-XXXXXXXX"
+
+# ---- Walmart ------------------------------------------------
+walmart:
+  enabled: true
+  products: []
+    # - name: "Pokemon TCG: 30th Celebration ETB"
+    #   url: "https://www.walmart.com/ip/XXXXXXXXX"
+
+# ---- 체크 주기 ----------------------------------------------
+# hot_windows: 집중 감시 시간대 (한국시간 KST, 24시간제. 자정 넘김 OK)
+#   미국 리스톡은 보통 미 동부 아침 = 한국 밤 22시~새벽 1시 (서머타임 기준)
+intervals:
+  normal_sec: 300        # 평상시 5분 간격
+  hot_sec: 25            # 집중 시간대 25초 간격
+  hot_windows:
+    - "21:30-01:30"
+    - "06:00-08:00"
+
+# ---- git 자동 push (대시보드 갱신) ---------------------------
+git:
+  auto_push: true
+  heartbeat_minutes: 15   # 변화 없어도 15분마다 한 번 push (last updated 갱신용)

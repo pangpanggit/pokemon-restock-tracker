@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>포켓몬 카드 리스톡 트래커</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='white' stroke='black' stroke-width='6'/><path d='M4 50 a46 46 0 0 1 92 0 z' fill='%23ee1515' stroke='black' stroke-width='6'/><rect x='4' y='46' width='92' height='8' fill='black'/><circle cx='50' cy='50' r='14' fill='white' stroke='black' stroke-width='6'/></svg>">
+<style>
+:root{
+  --bg:#0d1117; --bg2:#161b22; --card:#1c2330; --border:#2d3648;
+  --text:#e6edf3; --dim:#8b96a5; --red:#ee1515; --red2:#ff5a5a;
+  --green:#2ea043; --green2:#3fdd63; --amber:#d29922;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Apple SD Gothic Neo','Pretendard','Malgun Gothic',-apple-system,sans-serif;line-height:1.5}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px 80px}
+
+/* header */
+header{position:sticky;top:0;z-index:50;background:rgba(13,17,23,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+.hbar{max-width:1080px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px}
+.pokeball{width:26px;height:26px;border-radius:50%;background:linear-gradient(to bottom,var(--red) 0 45%,#111 45% 55%,#fff 55% 100%);border:2px solid #111;position:relative;flex:none;animation:none}
+.pokeball::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:8px;height:8px;background:#fff;border:2px solid #111;border-radius:50%}
+.live .pokeball{animation:shake 2.4s ease-in-out infinite}
+@keyframes shake{0%,86%,100%{transform:rotate(0)}88%{transform:rotate(-14deg)}92%{transform:rotate(12deg)}96%{transform:rotate(-6deg)}}
+.meta{font-size:12px;color:var(--dim);margin-left:auto;text-align:right}
+.btn{cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text);padding:7px 12px;border-radius:8px;font-size:13px;font-weight:600;transition:.15s}
+.btn:hover{border-color:var(--dim)}
+.btn.on{background:var(--green);border-color:var(--green);color:#fff}
+
+/* notices */
+.notice{margin:14px 0;padding:10px 14px;border-radius:10px;font-size:13px;border:1px solid var(--amber);background:rgba(210,153,34,.1);color:#e8c56a;display:none}
+.notice.show{display:block}
+.stockbar{margin:14px 0;padding:12px 16px;border-radius:12px;font-size:15px;font-weight:700;border:1px solid var(--green);background:rgba(46,160,67,.12);color:var(--green2);display:none}
+.stockbar.show{display:block;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 24px rgba(63,221,99,.35)}}
+
+/* section */
+.sec{margin-top:34px}
+.sec-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.sec-title{font-size:20px;font-weight:800}
+.badge{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;border:1px solid var(--border);color:var(--dim)}
+.site-banner{display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;margin-top:40px;border:1px solid var(--border)}
+.site-banner .s-name{font-size:19px;font-weight:800}
+.site-banner .s-stat{margin-left:auto;font-size:12px;color:var(--dim);text-align:right}
+.site-banner.pc{background:linear-gradient(120deg,rgba(238,21,21,.18),rgba(238,21,21,.04) 60%);border-color:rgba(238,21,21,.45)}
+.site-banner.tg{background:linear-gradient(120deg,rgba(204,0,0,.15),rgba(204,0,0,.03) 60%);border-color:rgba(204,0,0,.4)}
+.site-banner.wm{background:linear-gradient(120deg,rgba(0,113,206,.16),rgba(0,113,206,.03) 60%);border-color:rgba(0,113,206,.45)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.dot.ok{background:var(--green2)}.dot.bad{background:var(--red2)}.dot.na{background:var(--dim)}
+
+/* controls */
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 4px}
+.chip{cursor:pointer;font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg2);color:var(--dim)}
+.chip.on{background:var(--red);border-color:var(--red);color:#fff}
+.search{flex:1;min-width:180px;max-width:320px;padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-size:13px;outline:none}
+.search:focus{border-color:var(--dim)}
+
+/* cards */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px}
+.grid.hero{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;transition:.15s;position:relative}
+.card:hover{transform:translateY(-2px);border-color:var(--dim)}
+.card.instock{border-color:var(--green);box-shadow:0 0 0 1px var(--green),0 0 18px rgba(46,160,67,.25)}
+.thumb{aspect-ratio:1;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.thumb img{width:100%;height:100%;object-fit:contain}
+.thumb .noimg{font-size:40px}
+.cbody{padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
+.cname{font-size:13px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:35px}
+.crow{display:flex;align-items:center;gap:8px;margin-top:auto}
+.price{font-size:14px;font-weight:800}
+.status{font-size:11px;font-weight:800;padding:3px 9px;border-radius:20px;margin-left:auto}
+.status.in{background:rgba(46,160,67,.18);color:var(--green2);border:1px solid var(--green)}
+.status.out{background:rgba(139,150,165,.12);color:var(--dim);border:1px solid var(--border)}
+.status.unk{background:rgba(210,153,34,.12);color:var(--amber);border:1px solid var(--amber)}
+.order{display:block;text-align:center;font-size:13px;font-weight:800;padding:9px;border-radius:9px;background:var(--bg2);border:1px solid var(--border);color:var(--dim);transition:.15s}
+.card.instock .order{background:var(--green);border-color:var(--green);color:#fff}
+.card.instock .order:hover{background:var(--green2)}
+.card:not(.instock) .order:hover{color:var(--text);border-color:var(--dim)}
+.star{position:absolute;top:8px;left:8px;font-size:15px;filter:drop-shadow(0 0 3px rgba(0,0,0,.6))}
+.rel{font-size:11px;color:var(--dim)}
+.empty{padding:26px;border:1px dashed var(--border);border-radius:14px;color:var(--dim);font-size:13px;text-align:center}
+.count-note{font-size:12px;color:var(--dim);margin-top:8px}
+
+/* help */
+.help{margin-top:50px;padding:18px;border:1px solid var(--border);border-radius:14px;background:var(--bg2);font-size:13px;color:var(--dim)}
+.help b{color:var(--text)}
+.help code{background:var(--card);padding:2px 7px;border-radius:6px;font-size:12px;color:#7ee787;cursor:pointer}
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--dim)}
+@media(max-width:520px){.grid{grid-template-columns:repeat(2,1fr)}.cname{font-size:12px}}
+</style>
+</head>
+<body>
+<header><div class="hbar">
+  <div class="logo live"><div class="pokeball"></div><span id="title">포켓몬 카드 리스톡 트래커</span></div>
+  <button class="btn" id="notifBtn" onclick="toggleNotif()">🔔 브라우저 알림 켜기</button>
+  <button class="btn" id="soundBtn" onclick="toggleSound()">🔊 소리 알림</button>
+  <div class="meta">마지막 갱신 <b id="updated">—</b><br><span id="refreshInfo">30초마다 자동 새로고침</span></div>
+</div></header>
+
+<div class="wrap">
+  <div class="notice" id="sampleNotice">⚠️ 초기 샘플 데이터입니다 — 체커(check.py)를 실행하면 전체 상품 목록으로 자동 갱신돼요.</div>
+  <div class="notice" id="errNotice"></div>
+  <div class="stockbar" id="stockbar"></div>
+
+  <!-- 30주년 주력 -->
+  <div class="sec">
+    <div class="sec-head"><span class="sec-title">⭐ 30주년 (30th Celebration)</span><span class="badge" id="heroBadge"></span></div>
+    <div class="grid hero" id="heroGrid"></div>
+  </div>
+
+  <!-- Pokémon Center -->
+  <div class="site-banner pc"><div class="dot" id="pcDot"></div><span class="s-name">Pokémon Center</span><span class="s-stat" id="pcStat"></span></div>
+  <div class="controls">
+    <span class="chip on" data-f="all" onclick="setFilter(this)">전체</span>
+    <span class="chip" data-f="in" onclick="setFilter(this)">재고 있음</span>
+    <span class="chip" data-f="out" onclick="setFilter(this)">품절</span>
+    <input class="search" id="search" placeholder="상품명 검색…" oninput="render()">
+  </div>
+  <div id="pcSections"></div>
+
+  <!-- Target -->
+  <div class="site-banner tg"><div class="dot" id="tgDot"></div><span class="s-name">◎ Target</span><span class="s-stat" id="tgStat"></span></div>
+  <div class="sec" style="margin-top:14px"><div class="grid" id="tgGrid"></div><div class="empty" id="tgEmpty" style="display:none">추적 중인 Target 상품이 없어요. <b>config.yaml</b>의 target → products에 상품 URL을 추가하세요.</div></div>
+
+  <!-- Walmart -->
+  <div class="site-banner wm"><div class="dot" id="wmDot"></div><span class="s-name">✦ Walmart</span><span class="s-stat" id="wmStat"></span></div>
+  <div class="sec" style="margin-top:14px"><div class="grid" id="wmGrid"></div><div class="empty" id="wmEmpty" style="display:none">추적 중인 Walmart 상품이 없어요. <b>config.yaml</b>의 walmart → products에 상품 URL을 추가하세요.</div></div>
+
+  <div class="help">
+    <b>📱 폰으로 알림 받기 (페이지 안 열어놔도 됨!)</b><br>
+    1. 폰에 무료 앱 <b>ntfy</b> 설치 (App Store / Play Store)<br>
+    2. 앱에서 Subscribe to topic → <code id="topicCode" onclick="copyTopic()" title="탭하면 복사">—</code> 입력 (탭하면 복사돼요)<br>
+    3. 끝! 재고 뜨면 폰이 울립니다. 친구들도 같은 토픽 구독하면 같이 알림 받아요.<br><br>
+    <b>⚡ 빠른 주문 꿀팁</b>: 각 사이트에 <b>미리 로그인 + 배송지/카드 저장</b>해두면, 알림 클릭 → 장바구니 → 결제까지 30초 안에 끝낼 수 있어요.
+  </div>
+  <footer>Pokémon Restock Tracker · 데이터는 체커 PC에서 자동 갱신됩니다</footer>
+</div>
+
+<script>
+const EMBEDDED = {"version": 1, "initial_sample": true, "generated_at": "2026-08-09T00:00:00+00:00", "dashboard": {"title": "포켓몬 카드 리스톡 트래커"}, "ntfy_topic": "pkmn-restock-CHANGE-ME-8f3k2", "sites": {"pokemoncenter": {"label": "Pokémon Center", "ok": true, "checked_at": "2026-08-09T00:00:00+00:00", "categories": {"elite-trainer-box": {"label": "엘리트 트레이너 박스", "items": [{"code": "10-10447-111", "name": "Pokémon TCG: 30th Celebration Pokémon Center Elite Trainer Box", "price": "$59.99", "in_stock": false, "url": "https://www.pokemoncenter.com/product/10-10447-111/pokemon-tcg-30th-celebration-pokemon-center-elite-trainer-box", "img": "https://www.pokemoncenter.com/images/DAMRoot/Thumbnail/10048/P11454_10-10447-111_01.jpg", "release_date": "2026-07-15", "is_priority": true}]}, "booster-packs": {"label": "부스터 팩", "items": [{"code": "10-10451-115", "name": "Pokémon TCG: 30th Celebration Booster Bundle (6 Packs)", "price": "$26.94", "in_stock": false, "url": "https://www.pokemoncenter.com/product/10-10451-115/pokemon-tcg-30th-celebration-booster-bundle-6-packs", "img": "https://www.pokemoncenter.com/images/DAMRoot/Thumbnail/10049/P11460_10-10451-115_01.jpg", "release_date": "2026-07-20", "is_priority": true}, {"code": "10-10449-121", "name": "Pokémon TCG: 30th Celebration Tech Sticker Collection (Alolan Exeggutor)", "price": "$14.99", "in_stock": false, "url": "https://www.pokemoncenter.com/product/10-10449-121/pokemon-tcg-30th-celebration-tech-sticker-collection-alolan-exeggutor", "img": "https://www.pokemoncenter.com/images/DAMRoot/Thumbnail/10050/P11451_10-10449-121_01.jpg", "release_date": "2026-07-15", "is_priority": true}, {"code": "10-10449-122", "name": "Pokémon TCG: 30th Celebration Tech Sticker Collection (Lucario)", "price": "$14.99", "in_stock": false, "url": "https://www.pokemoncenter.com/product/10-10449-122/pokemon-tcg-30th-celebration-tech-sticker-collection-lucario", "img": "https://www.pokemoncenter.com/images/DAMRoot/Thumbnail/10050/P11451_10-10449-122_01.jpg", "release_date": "2026-07-15", "is_priority": true}]}, "boxed-sets": {"label": "박스 세트", "items": [{"code": "10-10667-101", "name": "Pokémon TCG: 30th Celebration Knock Out Collection", "price": "$9.99", "in_stock": false, "url": "https://www.pokemoncenter.com/product/10-10667-101/pokemon-tcg-30th-celebration-knock-out-collection", "img": "https://www.pokemoncenter.com/images/DAMRoot/Thumbnail/10050/P12487_10-10667-101_01.jpg", "release_date": "2026-07-15", "is_priority": true}]}}}, "target": {"label": "Target", "ok": null, "checked_at": null, "items": []}, "walmart": {"label": "Walmart", "ok": null, "checked_at": null, "items": []}}}; // fetch 실패 시(로컬 미리보기) 폴백
+let DATA=null, prevStock={}, firstLoad=true, filter='all', soundOn=false;
+
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+function fmtTime(iso){if(!iso)return '—';try{const d=new Date(iso);return d.toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}catch(e){return '—'}}
+
+function allItems(data){
+  const out=[]; const s=data.sites||{};
+  const pc=s.pokemoncenter||{};
+  for(const [cid,cat] of Object.entries(pc.categories||{}))
+    for(const it of (cat.items||[])) out.push({...it, site:'pokemoncenter', cat:cid, key:'pc:'+it.code});
+  for(const site of ['target','walmart'])
+    for(const it of ((s[site]||{}).items||[])) out.push({...it, site, key:site+':'+it.code});
+  return out;
+}
+
+function card(it, hero){
+  const st = it.in_stock===true?'in':(it.in_stock===false?'out':'unk');
+  const stTxt = st==='in'?'재고 있음':(st==='out'?'SOLD OUT':'확인 불가');
+  const orderTxt = st==='in'?'🛒 바로 주문 →':'상품 페이지 →';
+  const img = it.img?`<img src="${esc(it.img)}" loading="lazy" onerror="this.parentNode.innerHTML='<span class=noimg>🎴</span>'">`:`<span class="noimg">🎴</span>`;
+  return `<div class="card ${st==='in'?'instock':''}">
+    ${it.is_priority?'<span class="star">⭐</span>':''}
+    <a class="thumb" href="${esc(it.url)}" target="_blank" rel="noopener">${img}</a>
+    <div class="cbody">
+      <div class="cname">${esc(it.name)}</div>
+      ${it.release_date?`<div class="rel">출시 ${esc(it.release_date)}</div>`:''}
+      <div class="crow"><span class="price">${esc(it.price||'')}</span><span class="status ${st}">${stTxt}</span></div>
+      <a class="order" href="${esc(it.url)}" target="_blank" rel="noopener">${orderTxt}</a>
+    </div></div>`;
+}
+
+function matches(it){
+  if(filter==='in' && it.in_stock!==true) return false;
+  if(filter==='out' && it.in_stock!==false) return false;
+  const q=(document.getElementById('search').value||'').trim().toLowerCase();
+  if(q && !it.name.toLowerCase().includes(q)) return false;
+  return true;
+}
+
+function render(){
+  if(!DATA) return;
+  const items=allItems(DATA);
+  document.getElementById('title').textContent=(DATA.dashboard||{}).title||'포켓몬 카드 리스톡 트래커';
+  document.title=(DATA.dashboard||{}).title||'포켓몬 카드 리스톡 트래커';
+  document.getElementById('updated').textContent=fmtTime(DATA.generated_at);
+  document.getElementById('sampleNotice').classList.toggle('show', !!DATA.initial_sample);
+  const tc=document.getElementById('topicCode'); tc.textContent=DATA.ntfy_topic||'(config에서 설정)';
+
+  // hero: 우선(30th) 상품
+  const hero=items.filter(i=>i.is_priority);
+  const heroIn=hero.filter(i=>i.in_stock===true).length;
+  document.getElementById('heroGrid').innerHTML = hero.length?hero.map(i=>card(i,true)).join(''):'<div class="empty">아직 주력 상품이 없어요</div>';
+  document.getElementById('heroBadge').textContent=`${hero.length}개 추적 · 재고 ${heroIn}개`;
+
+  // 재고 배너
+  const inNow=items.filter(i=>i.in_stock===true);
+  const bar=document.getElementById('stockbar');
+  if(inNow.length){bar.classList.add('show');bar.innerHTML=`🟢 지금 <b>${inNow.length}개</b> 상품 재고 있음! ${inNow.slice(0,3).map(i=>`<a style="text-decoration:underline" href="${esc(i.url)}" target="_blank">${esc(i.name.slice(0,38))}…</a>`).join(' · ')}`}
+  else bar.classList.remove('show');
+
+  // PC 카테고리 섹션
+  const pc=(DATA.sites||{}).pokemoncenter||{};
+  const secs=[];
+  for(const [cid,cat] of Object.entries(pc.categories||{})){
+    const its=(cat.items||[]).map(i=>({...i,site:'pokemoncenter'}));
+    const vis=its.filter(matches);
+    const inCnt=its.filter(i=>i.in_stock===true).length;
+    secs.push(`<div class="sec"><div class="sec-head"><span class="sec-title">${esc(cat.label||cid)}</span><span class="badge">${its.length}개 · 재고 ${inCnt}</span></div>
+      ${vis.length?`<div class="grid">${vis.map(i=>card(i)).join('')}</div>`:`<div class="empty">조건에 맞는 상품 없음</div>`}</div>`);
+  }
+  document.getElementById('pcSections').innerHTML=secs.join('');
+  setSite('pc', pc);
+  setSite('tg', (DATA.sites||{}).target||{}, 'tgGrid','tgEmpty');
+  setSite('wm', (DATA.sites||{}).walmart||{}, 'wmGrid','wmEmpty');
+}
+
+function setSite(pfx, s, gridId, emptyId){
+  const dot=document.getElementById(pfx+'Dot'), stat=document.getElementById(pfx+'Stat');
+  dot.className='dot '+(s.ok===true?'ok':(s.ok===false?'bad':'na'));
+  stat.innerHTML=(s.ok===false?'⚠️ 체크 오류<br>':'')+(s.checked_at?'체크 '+fmtTime(s.checked_at):'대기 중');
+  if(gridId){
+    const items=(s.items||[]).filter(matches);
+    document.getElementById(gridId).innerHTML=items.map(i=>card(i)).join('');
+    document.getElementById(emptyId).style.display=(s.items||[]).length?'none':'block';
+  }
+}
+
+function setFilter(el){
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on'); filter=el.dataset.f; render();
+}
+
+/* ---- 알림 ---- */
+function toggleNotif(){
+  if(!('Notification' in window)){alert('이 브라우저는 알림을 지원하지 않아요');return}
+  Notification.requestPermission().then(p=>{
+    document.getElementById('notifBtn').classList.toggle('on', p==='granted');
+    document.getElementById('notifBtn').textContent = p==='granted'?'🔔 브라우저 알림 ON':'🔔 브라우저 알림 켜기';
+  });
+}
+function toggleSound(){
+  soundOn=!soundOn;
+  const b=document.getElementById('soundBtn');
+  b.classList.toggle('on',soundOn); b.textContent=soundOn?'🔊 소리 알림 ON':'🔊 소리 알림';
+  if(soundOn) beep(0.05);
+}
+function beep(vol){
+  try{const ac=new (window.AudioContext||window.webkitAudioContext)();
+  const o=ac.createOscillator(),g=ac.createGain();
+  o.connect(g);g.connect(ac.destination);o.frequency.value=880;g.gain.value=vol||0.15;
+  o.start();o.frequency.setValueAtTime(1174,ac.currentTime+0.15);o.stop(ac.currentTime+0.35);}catch(e){}
+}
+function fireAlerts(items){
+  const restocked=[];
+  for(const it of items){
+    const was=prevStock[it.key];
+    if(it.in_stock===true && was!==true && !firstLoad) restocked.push(it);
+    prevStock[it.key]=it.in_stock;
+  }
+  if(restocked.length && !firstLoad){
+    if(soundOn){beep();setTimeout(beep,500);setTimeout(beep,1000)}
+    if(('Notification' in window) && Notification.permission==='granted'){
+      for(const it of restocked.slice(0,4)){
+        const n=new Notification('🟢 재고 떴다! '+it.name.slice(0,60),{body:(it.price||'')+' — 클릭해서 바로 주문!',requireInteraction:true});
+        n.onclick=()=>{window.open(it.url,'_blank');n.close()};
+      }
+    }
+  }
+  firstLoad=false;
+}
+function copyTopic(){
+  const t=document.getElementById('topicCode').textContent;
+  navigator.clipboard&&navigator.clipboard.writeText(t).then(()=>{
+    const el=document.getElementById('topicCode');const o=el.textContent;
+    el.textContent='복사됨! ✓';setTimeout(()=>el.textContent=o,1200);});
+}
+
+/* ---- 데이터 로드 ---- */
+async function load(){
+  try{
+    const r=await fetch('status.json?t='+Date.now(),{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    DATA=await r.json();
+    document.getElementById('errNotice').classList.remove('show');
+  }catch(e){
+    if(!DATA && EMBEDDED) DATA=EMBEDDED;
+    const en=document.getElementById('errNotice');
+    en.textContent='⚠️ 데이터 로드 실패 ('+e.message+') — 잠시 후 다시 시도합니다';
+    en.classList.add('show');
+  }
+  if(DATA){ render(); fireAlerts(allItems(DATA)); }
+}
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>
