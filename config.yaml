@@ -40,11 +40,45 @@ watchlist:
   open_browser: true        # 재고 뜨면 체커 PC 브라우저에서 상품 페이지 자동 오픈
   repeat_alert_minutes: 2   # 재고가 남아있는 동안 N분마다 재알림 (0 = 끔)
   notify_on_change: true    # 판정은 그대로인데 페이지 신호가 바뀌면 '👀 변화 감지' 알림
-  products: []
+  products:
+    # ── 포켓몬 카드 게임 MEGA 확장팩 「30th CELEBRATION」 (한글판) — 판매처 6곳 ──
+    - name: "30th CELEBRATION — 포켓몬카드 공식인증샵"
+      shop: "스마트스토어 (공식인증샵)"
+      url: "https://smartstore.naver.com/pokemontcg/products/13763157937"
+      must: true
+      min_interval_sec: 30      # 네이버는 차단이 민감해서 30초보다 자주 안 봄
+      note: "네이버페이 · 재입고 알림 신청해두기"
+    - name: "30th CELEBRATION — 몬콜레 공식스토어"
+      shop: "스마트스토어 (몬콜레/아카데미과학)"
+      url: "https://naver.me/5mv0WSB0"
+      must: true
+      min_interval_sec: 30
+      note: "네이버페이 · 재입고 알림 신청해두기"
+    - name: "30th CELEBRATION — 카드매니아"
+      shop: "카드매니아"
+      url: "https://m.cardmania2021.com/goods/goods_view.php?goodsNo=1000000876"
+      must: true
+      note: "자체몰 — 미리 회원가입 + 로그인 유지"
+    - name: "30th CELEBRATION — G마켓"
+      shop: "G마켓"
+      url: "https://link.gmarket.co.kr/AxTFRkczu"
+      must: true
+      note: "스마일페이 등록"
+    - name: "30th CELEBRATION — 롯데ON"
+      shop: "롯데ON"
+      url: "https://s.lotteon.com/Y2vpuuC7yo"
+      must: true
+      note: "L.pay/간편결제 등록"
+    - name: "30th CELEBRATION — SSG"
+      shop: "SSG"
+      url: "http://ssg.li/SFVwZkItmd"
+      must: true
+      note: "SSGPAY 등록"
     # - name: "상품 이름 (알아보기 쉽게)"
     #   url: "https://smartstore.naver.com/xxxx/products/1234567890"
     #   must: true            # true = 꼭 살 것 (최우선 알림 + 재알림)
     #   bought: false         # 샀으면 true → 알림 중지
+    #   min_interval_sec: 30  # 이 상품은 N초보다 자주 확인 안 함 (차단 민감한 곳)
     #   note: "1인 2개 제한, 네이버페이"   # 대시보드에 메모로 표시
     #   # 판정이 틀릴 때만 (페이지 문구 그대로, 대소문자 무시):
     #   # sold_out_text: ["일시품절"]
