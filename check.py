@@ -655,10 +655,12 @@ def run_cycle(cfg, state, full=True):
         f"입고알림 {len(restocked)}건, 신상품 {fresh}건")
 
 
-def in_hot_window(cfg):
+def in_hot_window(cfg, windows=None):
     now = datetime.now(KST)
     cur = now.hour * 60 + now.minute
-    for w in (cfg.get("intervals") or {}).get("hot_windows", []):
+    if windows is None:
+        windows = (cfg.get("intervals") or {}).get("hot_windows", [])
+    for w in windows:
         try:
             a, b = w.split("-")
             h1, m1 = map(int, a.split(":"))
@@ -723,7 +725,8 @@ def main():
         w = cfg.get("watchlist") or {}
         has_watch = bool(w.get("products")) and w.get("enabled", True)
         if has_watch:
-            interval = w.get("hot_interval_sec", 15) if hot else w.get("interval_sec", 45)
+            w_hot = hot or in_hot_window(cfg, w.get("hot_windows") or [])
+            interval = w.get("hot_interval_sec", 15) if w_hot else w.get("interval_sec", 45)
         else:
             interval = full_every
         interval *= random.uniform(0.85, 1.25)

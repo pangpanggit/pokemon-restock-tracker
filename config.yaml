@@ -28,7 +28,14 @@ dashboard:
 watchlist:
   enabled: true
   interval_sec: 45          # 평상시 관심상품 체크 간격
-  hot_interval_sec: 15      # 집중 시간대(intervals.hot_windows) 간격
+  hot_interval_sec: 15      # 집중 시간대 간격
+  # 관심상품 전용 집중 시간대 (KST). intervals.hot_windows(미국 몰 시간)에도 같이 집중함.
+  # 국내 몰은 업무시간 오픈/재고반영이 많아 우선 아래로 시작 →
+  # 대시보드 '재입고 기록'이 쌓이면 실제 뜬 시간대로 고치세요.
+  hot_windows:
+    - "09:50-11:30"
+    - "13:50-15:30"
+    - "19:50-20:30"
   gap_sec: 1.5              # 상품 사이 간격 (같은 사이트 연타 방지)
   open_browser: true        # 재고 뜨면 체커 PC 브라우저에서 상품 페이지 자동 오픈
   repeat_alert_minutes: 2   # 재고가 남아있는 동안 N분마다 재알림 (0 = 끔)
