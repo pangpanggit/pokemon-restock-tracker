@@ -13,6 +13,7 @@
   python check.py --loop          # 상시 감시 (config의 주기 사용)
   python check.py --test-notify   # 폰 알림 테스트
   python check.py --probe URL     # 관심 상품 URL 판정 점검
+  python check.py --probe-all     # 관심 상품 전체 판정 점검
 """
 import argparse
 import json
@@ -103,15 +104,19 @@ def _fetch_via_playwright(url, wait_selector=None):
     return page.content()
 
 
-def fetch_html(url, wait_selector=None):
+def fetch_html(url, wait_selector=None, with_url=False):
+    """with_url=True면 (html, 리다이렉트 끝난 최종 URL) 반환 — 단축링크 풀기용."""
     try:
         r = _session.get(url, timeout=25)
         if not _looks_blocked(r.status_code, r.text):
-            return r.text
+            return (r.text, r.url) if with_url else r.text
         log(f"  requests 차단 감지({r.status_code}) → Playwright 폴백: {url}")
     except requests.RequestException as e:
         log(f"  requests 실패({e.__class__.__name__}) → Playwright 폴백")
-    return _fetch_via_playwright(url, wait_selector)
+    html = _fetch_via_playwright(url, wait_selector)
+    if with_url:
+        return html, _playwright_ctx["page"].url
+    return html
 
 
 # ------------------------------------------------------------------
@@ -330,39 +335,69 @@ def signal_fingerprint(html):
     return "|".join(sorted(set(hits)))
 
 
-def check_watch_item(p):
-    """1개 상품 체크. JS 렌더링 사이트는 판단불가 시 브라우저로 재시도."""
-    url = p["url"]
-    html = fetch_html(url)
+SHORT_HOSTS = ("naver.me", "link.gmarket", "s.lotteon", "ssg.li", "bit.ly",
+               "link.coupang", "coupa.ng", "han.gl", "url.kr", "me2.do")
+
+
+def is_short_link(url):
+    return any(h in url.lower() for h in SHORT_HOSTS)
+
+
+def check_watch_item(p, url=None):
+    """1개 상품 체크 → (재고, 근거, 신호지문, 최종URL).
+    JS 렌더링 사이트는 판단불가 시 브라우저로 재시도."""
+    url = url or p["url"]
+    html, final = fetch_html(url, with_url=True)
     in_stock, why = detect_stock(html, p)
     if in_stock is None:
-        html = _fetch_via_playwright(url)
+        html = _fetch_via_playwright(final or url)
+        final = _playwright_ctx["page"].url or final
         in_stock, why = detect_stock(html, p)
         why = "[브라우저] " + why
-    return in_stock, why, signal_fingerprint(html)
+    return in_stock, why, signal_fingerprint(html), final
 
 
 def check_watchlist(cfg, old_items):
     prev = {it["code"]: it for it in old_items or []}
+    wcfg = cfg.get("watchlist") or {}
     items = []
-    for p in (cfg.get("watchlist") or {}).get("products") or []:
+    for p in wcfg.get("products") or []:
         url = p["url"]
         name = p.get("name") or url
+        old = prev.get(url, {})
+        # 단축링크(naver.me 등)는 처음 한 번 풀어서 진짜 상품 주소를 기억
+        target = old.get("url") if is_short_link(url) and old.get("url") else url
         in_stock, why, fp, err = None, "", None, None
-        if not p.get("bought"):
+        checked_ts = old.get("checked_ts", 0)
+        # 상품별 최소 간격 (네이버처럼 차단 민감한 곳은 덜 자주)
+        min_iv = float(p.get("min_interval_sec", 0))
+        if p.get("bought"):
+            pass
+        elif min_iv and time.time() - checked_ts < min_iv and "in_stock" in old:
+            in_stock, why, fp = old.get("in_stock"), old.get("signal", ""), old.get("fp")
+            items.append({**old, "name": name, "note": p.get("note", ""),
+                          "must": bool(p.get("must", True)),
+                          "is_priority": bool(p.get("must", True)), "bought": False})
+            continue
+        else:
             try:
-                in_stock, why, fp = check_watch_item(p)
+                in_stock, why, fp, final = check_watch_item(p, target)
+                checked_ts = time.time()
+                if final and not is_short_link(final) and final != target:
+                    if is_short_link(url):
+                        log(f"  [관심] 단축링크 풀림: {url} → {final}")
+                        target = final
             except Exception as e:
                 err = str(e)[:200]
                 log(f"  [관심] 체크 실패: {name} — {err}")
-        old = prev.get(url, {})
         items.append({
             "code": url,
             "name": name,
-            "shop": p.get("shop") or shop_label(url),
+            "shop": p.get("shop") or shop_label(target),
             "price": p.get("price"),
             "in_stock": in_stock,
-            "url": url,
+            "url": target,
+            "checked_ts": checked_ts,
             "img": p.get("img", ""),
             "release_date": "",
             "is_priority": bool(p.get("must", True)),
@@ -379,6 +414,22 @@ def check_watchlist(cfg, old_items):
             f" ({why or err or '-'})")
         time.sleep(float((cfg.get("watchlist") or {}).get("gap_sec", 1.5)))
     return items
+
+
+def probe_all(cfg):
+    """관심 상품 전부 1회 판정해서 표로 출력 (결과를 그대로 복사해 공유하면 됨)."""
+    rows = []
+    for p in (cfg.get("watchlist") or {}).get("products") or []:
+        try:
+            st, why, fp, final = check_watch_item(p)
+            v = {True: "재고있음", False: "품절", None: "판단불가"}[st]
+        except Exception as e:
+            v, why, fp, final = "오류", str(e)[:80], "", ""
+        rows.append((p.get("name", "")[:30], v, why, final, fp))
+        time.sleep(1.5)
+    print("\n===== probe-all 결과 (이 아래를 통째로 복사해서 공유) =====")
+    for name, v, why, final, fp in rows:
+        print(f"- {name} | {v} | {why}\n    최종URL: {final}\n    신호: {fp}")
 
 
 def probe(url):
@@ -683,10 +734,14 @@ def main():
     ap.add_argument("--loop", action="store_true", help="상시 감시 루프")
     ap.add_argument("--test-notify", action="store_true", help="알림 테스트")
     ap.add_argument("--probe", metavar="URL", help="상품 URL 1개의 재고 판정 근거 출력")
+    ap.add_argument("--probe-all", action="store_true", help="관심 상품 전체 판정 점검")
     args = ap.parse_args()
 
     if args.probe:
         probe(args.probe)
+        return
+    if args.probe_all:
+        probe_all(load_config())
         return
 
     cfg = load_config()
