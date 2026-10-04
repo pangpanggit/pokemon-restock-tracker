@@ -4,6 +4,7 @@
 포켓몬 카드 리스톡 체커
 - Pokémon Center 카테고리 전체 스캔 (__NEXT_DATA__ 파싱)
 - Target / Walmart 개별 상품 페이지 체크
+- 관심 상품(watchlist): 국내외 아무 쇼핑몰 URL 감시 → 재고 시 폰 알림 + PC 브라우저 자동 오픈
 - status.json 갱신 → git push → GitHub Pages 대시보드 반영
 - 품절→재고 전환 시 ntfy 폰 푸시 알림
 
@@ -11,9 +12,11 @@
   python check.py --once          # 1회 체크
   python check.py --loop          # 상시 감시 (config의 주기 사용)
   python check.py --test-notify   # 폰 알림 테스트
+  python check.py --probe URL     # 관심 상품 URL 판정 점검
 """
 import argparse
 import json
+import random
 import re
 import subprocess
 import sys
@@ -225,6 +228,185 @@ def check_product_site(site, products):
 
 
 # ------------------------------------------------------------------
+# 관심 상품 (watchlist) — 아무 쇼핑몰 URL이나 감시
+# ------------------------------------------------------------------
+SHOP_LABELS = (
+    ("smartstore.naver.com", "네이버 스마트스토어"),
+    ("brand.naver.com", "네이버 브랜드스토어"),
+    ("shopping.naver.com", "네이버쇼핑"),
+    ("coupang.com", "쿠팡"),
+    ("11st.co.kr", "11번가"),
+    ("gmarket.co.kr", "G마켓"),
+    ("auction.co.kr", "옥션"),
+    ("lotteon.com", "롯데ON"),
+    ("ssg.com", "SSG"),
+    ("emart", "이마트"),
+    ("homeplus", "홈플러스"),
+    ("kakao", "카카오"),
+    ("pokemonkorea", "포켓몬코리아"),
+    ("pokemoncenter-online.com", "포켓몬센터 온라인(JP)"),
+    ("pokemoncenter.com", "Pokémon Center"),
+    ("amazon.", "Amazon"),
+    ("target.com", "Target"),
+    ("walmart.com", "Walmart"),
+)
+
+# 구조화 데이터(JSON) 신호 — 텍스트보다 정확해서 먼저 본다
+JSON_OUT = (
+    r'"productstatustype"\s*:\s*"(outofstock|suspension|close|prohibition)"',
+    r'"availability"\s*:\s*"(https?://schema\.org/)?(outofstock|soldout|discontinued)"',
+    r'"(issoldout|soldout|outofstock)"\s*:\s*true',
+    r'"availabilitystatus"\s*:\s*"out_of_stock"',
+    r'"availability_status"\s*:\s*"out_of_stock"',
+)
+JSON_IN = (
+    r'"productstatustype"\s*:\s*"sale"',
+    r'"availability"\s*:\s*"(https?://schema\.org/)?(instock|limitedavailability|onlineonly)"',
+    r'"(issoldout|soldout|outofstock)"\s*:\s*false',
+    r'"availabilitystatus"\s*:\s*"in_stock"',
+    r'"availability_status"\s*:\s*"in_stock"',
+)
+# 화면 텍스트 신호 (script/style 제거 후 검사)
+TEXT_OUT = ("일시품절", "품절", "재고 없음", "재고없음", "판매종료", "판매 종료",
+            "판매중지", "구매불가", "구매 불가", "재입고 알림", "입고알림",
+            "sold out", "out of stock", "currently unavailable")
+TEXT_IN = ("바로구매", "바로 구매", "구매하기", "장바구니 담기",
+           "add to cart", "buy now")
+_TAG_RE = re.compile(r"<(script|style|noscript)[^>]*>.*?</\1>", re.S | re.I)
+
+
+def shop_label(url):
+    u = url.lower()
+    for key, label in SHOP_LABELS:
+        if key in u:
+            return label
+    m = re.match(r"https?://(?:www\.|m\.)?([^/]+)", u)
+    return m.group(1) if m else "기타"
+
+
+def detect_stock(html, item=None):
+    """(in_stock, 근거) 반환. in_stock은 True/False/None(판단불가).
+
+    우선순위: ① 상품별 수동 문구 → ② JSON 구조화 신호 → ③ 화면 텍스트.
+    '품절'은 정책 안내문 등에 섞여 나오기 쉬워서, 상품마다
+    `python check.py --probe URL`로 실제 판정을 꼭 확인하세요.
+    """
+    item = item or {}
+    raw = html.lower()
+    text = re.sub(r"<[^>]+>", " ", _TAG_RE.sub(" ", html)).lower()
+    text = re.sub(r"\s+", " ", text)
+
+    for t in item.get("sold_out_text") or []:
+        if t.lower() in text or t.lower() in raw:
+            return False, f"수동문구(품절): {t}"
+    for t in item.get("in_stock_text") or []:
+        if t.lower() in text or t.lower() in raw:
+            return True, f"수동문구(재고): {t}"
+
+    for pat in JSON_OUT:
+        m = re.search(pat, raw)
+        if m:
+            return False, f"JSON: {m.group(0)[:60]}"
+    for pat in JSON_IN:
+        m = re.search(pat, raw)
+        if m:
+            return True, f"JSON: {m.group(0)[:60]}"
+
+    for t in TEXT_OUT:
+        if t in text:
+            return False, f"텍스트(품절): {t}"
+    for t in TEXT_IN:
+        if t in text:
+            return True, f"텍스트(재고): {t}"
+    return None, "신호 없음"
+
+
+def signal_fingerprint(html):
+    """페이지에서 잡힌 신호 묶음. 판정이 틀려도 '뭔가 바뀜'은 잡아내기 위한 보험."""
+    raw = html.lower()
+    text = re.sub(r"<[^>]+>", " ", _TAG_RE.sub(" ", html)).lower()
+    hits = [m.group(0)[:50] for pat in JSON_OUT + JSON_IN for m in re.finditer(pat, raw)]
+    hits += [t for t in TEXT_OUT + TEXT_IN if t in text]
+    return "|".join(sorted(set(hits)))
+
+
+def check_watch_item(p):
+    """1개 상품 체크. JS 렌더링 사이트는 판단불가 시 브라우저로 재시도."""
+    url = p["url"]
+    html = fetch_html(url)
+    in_stock, why = detect_stock(html, p)
+    if in_stock is None:
+        html = _fetch_via_playwright(url)
+        in_stock, why = detect_stock(html, p)
+        why = "[브라우저] " + why
+    return in_stock, why, signal_fingerprint(html)
+
+
+def check_watchlist(cfg, old_items):
+    prev = {it["code"]: it for it in old_items or []}
+    items = []
+    for p in (cfg.get("watchlist") or {}).get("products") or []:
+        url = p["url"]
+        name = p.get("name") or url
+        in_stock, why, fp, err = None, "", None, None
+        if not p.get("bought"):
+            try:
+                in_stock, why, fp = check_watch_item(p)
+            except Exception as e:
+                err = str(e)[:200]
+                log(f"  [관심] 체크 실패: {name} — {err}")
+        old = prev.get(url, {})
+        items.append({
+            "code": url,
+            "name": name,
+            "shop": p.get("shop") or shop_label(url),
+            "price": p.get("price"),
+            "in_stock": in_stock,
+            "url": url,
+            "img": p.get("img", ""),
+            "release_date": "",
+            "is_priority": bool(p.get("must", True)),
+            "must": bool(p.get("must", True)),
+            "bought": bool(p.get("bought")),
+            "note": p.get("note", ""),
+            "signal": why,
+            "fp": fp,
+            "error": err,
+            "last_in_stock_at": old.get("last_in_stock_at"),
+        })
+        log(f"  [관심] {name[:40]} → "
+            f"{'구매완료' if p.get('bought') else {True: '재고!', False: '품절', None: '판단불가'}[in_stock]}"
+            f" ({why or err or '-'})")
+        time.sleep(float((cfg.get("watchlist") or {}).get("gap_sec", 1.5)))
+    return items
+
+
+def probe(url):
+    """URL 1개를 받아서 판정 근거를 출력 (설정 점검용)."""
+    print(f"쇼핑몰: {shop_label(url)}")
+    html = fetch_html(url)
+    print(f"[requests] 판정: {detect_stock(html)}")
+    try:
+        html2 = _fetch_via_playwright(url)
+        print(f"[브라우저] 판정: {detect_stock(html2)}")
+        html = html2
+    except Exception as e:
+        print(f"[브라우저] 실패: {e}")
+    raw = html.lower()
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", _TAG_RE.sub(" ", html))).lower()
+    print("\n발견된 신호:")
+    for pat in JSON_OUT + JSON_IN:
+        for m in re.finditer(pat, raw):
+            print(f"  JSON  {m.group(0)[:70]}")
+    for t in TEXT_OUT + TEXT_IN:
+        i = text.find(t)
+        if i >= 0:
+            print(f"  TEXT  '{t}' … {text[max(0, i - 30):i + 30]!r}")
+    print("\n→ 품절일 때와 재고 있을 때 판정이 다르게 나오는지 확인하세요."
+          "\n  엉뚱한 문구에 걸리면 config의 sold_out_text / in_stock_text 로 고정하세요.")
+
+
+# ------------------------------------------------------------------
 # 알림 (ntfy)
 # ------------------------------------------------------------------
 def notify(cfg, title, message, click_url=None, priority="urgent", tags=None):
@@ -259,18 +441,38 @@ def flatten(status):
     for cat_id, cat in (pc.get("categories") or {}).items():
         for it in cat.get("items", []):
             flat[f"pc:{it['code']}"] = it
-    for site in ("target", "walmart"):
+    for site in ("target", "walmart", "watchlist"):
         for it in (sites.get(site, {}).get("items") or []):
             flat[f"{site}:{it['code']}"] = it
     return flat
 
 
-def diff_and_notify(cfg, old_status, new_status):
+def update_restock_log(old_status, new_status, restocked_keys, now_iso):
+    """재입고 기록 (언제 떴고 몇 분 만에 빠졌는지) → 집중 시간대 잡는 근거 데이터."""
+    events = list((old_status or {}).get("restock_log") or [])
+    new_flat = flatten(new_status)
+    open_ev = {e["key"]: e for e in events if not e.get("out_at")}
+    for key in restocked_keys:
+        it = new_flat[key]
+        it["last_in_stock_at"] = now_iso
+        events.append({"key": key, "name": it["name"], "shop": it.get("shop", key.split(":")[0]),
+                       "url": it["url"], "in_at": now_iso, "out_at": None})
+    for key, ev in open_ev.items():
+        it = new_flat.get(key)
+        if it is None or it.get("in_stock") is False:
+            ev["out_at"] = now_iso
+    new_status["restock_log"] = events[-100:]
+
+
+def diff_and_notify(cfg, old_status, new_status, state=None):
+    state = state if state is not None else {}
     old_flat = flatten(old_status) if old_status else {}
     new_flat = flatten(new_status)
-    dash_url = (cfg.get("dashboard") or {}).get("url")
-    restocked, fresh = [], []
+    wcfg = cfg.get("watchlist") or {}
+    restocked, fresh, changed = [], [], []
     for key, it in new_flat.items():
+        if it.get("bought"):
+            continue
         prev = old_flat.get(key)
         if prev is None:
             if not old_flat:
@@ -278,14 +480,47 @@ def diff_and_notify(cfg, old_status, new_status):
             fresh.append(it)
             continue
         if it.get("in_stock") is True and prev.get("in_stock") is not True:
-            restocked.append(it)
-    for it in restocked:
+            restocked.append((key, it))
+        elif (key.startswith("watchlist:") and it.get("must")
+              and wcfg.get("notify_on_change", True)
+              and prev.get("in_stock") == it.get("in_stock")
+              and prev.get("fp") is not None and it.get("fp") is not None
+              and prev.get("fp") != it.get("fp")):
+            changed.append(it)
+
+    now = time.time()
+    last_alert = state.setdefault("last_alert", {})
+    for key, it in restocked:
         star = "⭐ " if it.get("is_priority") else ""
+        shop = f"[{it['shop']}] " if it.get("shop") else ""
         notify(cfg,
-               f"🟢 재고 떴다! {star}{it['name'][:60]}",
+               f"🟢 재고 떴다! {star}{shop}{it['name'][:60]}",
                f"{it.get('price') or ''} — 지금 바로 주문하세요!",
                click_url=it["url"], priority="urgent",
                tags=["rotating_light", "moneybag"])
+        last_alert[key] = now
+        if key.startswith("watchlist:") and wcfg.get("open_browser", True):
+            open_in_browser(it["url"])
+
+    # 아직 재고 남아있는 '꼭 살 것' → 놓쳤을까봐 재알림
+    repeat = float(wcfg.get("repeat_alert_minutes", 2)) * 60
+    if repeat > 0:
+        for key, it in new_flat.items():
+            if (key.startswith("watchlist:") and it.get("must") and not it.get("bought")
+                    and it.get("in_stock") is True
+                    and key not in dict(restocked)
+                    and now - last_alert.get(key, 0) >= repeat):
+                notify(cfg, f"⏰ 아직 재고 있음! {it['name'][:60]}",
+                       "구매했으면 config.yaml에서 bought: true 로 바꿔주세요",
+                       click_url=it["url"], priority="urgent", tags=["alarm_clock"])
+                last_alert[key] = now
+
+    for it in changed:
+        notify(cfg, f"👀 페이지 변화 감지: {it['name'][:60]}",
+               f"판정은 '{'재고' if it.get('in_stock') else '품절/불명'}'인데 페이지 신호가 바뀌었어요. 직접 확인!\n"
+               f"신호: {it.get('fp') or '-'}"[:300],
+               click_url=it["url"], priority="high", tags=["eyes"])
+
     if cfg.get("pokemoncenter", {}).get("notify_new_products"):
         for it in fresh:
             if it.get("is_priority"):
@@ -293,7 +528,17 @@ def diff_and_notify(cfg, old_status, new_status):
                        f"🆕 신상품 감지: {it['name'][:60]}",
                        f"{it.get('price') or ''} — 재고: {'있음!' if it.get('in_stock') else '아직 품절'}",
                        click_url=it["url"], priority="high", tags=["new"])
-    return len(restocked), len(fresh)
+    return [k for k, _ in restocked], len(fresh)
+
+
+def open_in_browser(url):
+    """체커 PC의 기본 브라우저(평소 로그인해둔 그 브라우저)로 상품 페이지 즉시 열기."""
+    try:
+        import webbrowser
+        webbrowser.open(url, new=2)
+        log(f"  🌐 브라우저로 열기: {url}")
+    except Exception as e:
+        log(f"  브라우저 열기 실패: {e}")
 
 
 def content_signature(status):
@@ -330,7 +575,8 @@ def git_push(reason):
 # ------------------------------------------------------------------
 # 메인 사이클
 # ------------------------------------------------------------------
-def run_cycle(cfg, state):
+def run_cycle(cfg, state, full=True):
+    """full=True: 전체 스캔 / False: 관심 상품(watchlist)만 빠르게 재확인"""
     now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
     old_status = None
     if STATUS_PATH.exists():
@@ -340,6 +586,7 @@ def run_cycle(cfg, state):
                 old_status = None  # 샘플 데이터는 비교 대상 아님
         except Exception:
             pass
+    old_sites = (old_status or {}).get("sites", {})
 
     status = {
         "version": 1,
@@ -350,31 +597,45 @@ def run_cycle(cfg, state):
         "sites": {},
     }
 
+    # 관심 상품 — 매 사이클 체크 (가장 중요)
+    if (cfg.get("watchlist") or {}).get("enabled", True) and \
+            (cfg.get("watchlist") or {}).get("products"):
+        items = check_watchlist(cfg, (old_sites.get("watchlist") or {}).get("items"))
+        status["sites"]["watchlist"] = {"label": "관심 상품", "ok": True,
+                                        "checked_at": now_iso, "items": items}
+
     # Pokémon Center
     if cfg.get("pokemoncenter", {}).get("enabled"):
-        try:
-            cats = check_pokemoncenter(cfg)
-            status["sites"]["pokemoncenter"] = {
-                "label": "Pokémon Center", "ok": True,
-                "checked_at": now_iso, "categories": cats}
-        except Exception as e:
-            log(f"  [PC] 체크 실패: {e}")
-            prev = (old_status or {}).get("sites", {}).get("pokemoncenter", {})
-            status["sites"]["pokemoncenter"] = {
-                "label": "Pokémon Center", "ok": False,
-                "checked_at": now_iso, "error": str(e)[:300],
-                "categories": prev.get("categories", {})}
+        if not full and "pokemoncenter" in old_sites:
+            status["sites"]["pokemoncenter"] = old_sites["pokemoncenter"]
+        else:
+            try:
+                cats = check_pokemoncenter(cfg)
+                status["sites"]["pokemoncenter"] = {
+                    "label": "Pokémon Center", "ok": True,
+                    "checked_at": now_iso, "categories": cats}
+            except Exception as e:
+                log(f"  [PC] 체크 실패: {e}")
+                prev = old_sites.get("pokemoncenter", {})
+                status["sites"]["pokemoncenter"] = {
+                    "label": "Pokémon Center", "ok": False,
+                    "checked_at": now_iso, "error": str(e)[:300],
+                    "categories": prev.get("categories", {})}
 
     # Target / Walmart
     for site, label in (("target", "Target"), ("walmart", "Walmart")):
         scfg = cfg.get(site, {})
         if not scfg.get("enabled"):
             continue
+        if not full and site in old_sites:
+            status["sites"][site] = old_sites[site]
+            continue
         items = check_product_site(site, scfg.get("products"))
         status["sites"][site] = {"label": label, "ok": True,
                                  "checked_at": now_iso, "items": items}
 
-    restocked, fresh = diff_and_notify(cfg, old_status, status)
+    restocked, fresh = diff_and_notify(cfg, old_status, status, state)
+    update_restock_log(old_status, status, restocked, now_iso)
     save_status(status)
 
     # push 판단: 내용 변경 or 하트비트
@@ -383,21 +644,23 @@ def run_cycle(cfg, state):
     should_push = (sig != state.get("last_sig")
                    or time.time() - state.get("last_push", 0) > heartbeat)
     if (cfg.get("git") or {}).get("auto_push") and should_push:
-        reason = f"재고변화 {restocked}건" if sig != state.get("last_sig") else "heartbeat"
+        reason = f"재고변화 {len(restocked)}건" if sig != state.get("last_sig") else "heartbeat"
         git_push(reason)
         state["last_push"] = time.time()
     state["last_sig"] = sig
 
     total_items = len(flatten(status))
     in_stock = sum(1 for v in flatten(status).values() if v.get("in_stock") is True)
-    log(f"사이클 완료: {total_items}개 추적, 재고 {in_stock}개, "
-        f"입고알림 {restocked}건, 신상품 {fresh}건")
+    log(f"{'전체' if full else '관심상품'} 사이클 완료: {total_items}개 추적, 재고 {in_stock}개, "
+        f"입고알림 {len(restocked)}건, 신상품 {fresh}건")
 
 
-def in_hot_window(cfg):
+def in_hot_window(cfg, windows=None):
     now = datetime.now(KST)
     cur = now.hour * 60 + now.minute
-    for w in (cfg.get("intervals") or {}).get("hot_windows", []):
+    if windows is None:
+        windows = (cfg.get("intervals") or {}).get("hot_windows", [])
+    for w in windows:
         try:
             a, b = w.split("-")
             h1, m1 = map(int, a.split(":"))
@@ -419,7 +682,12 @@ def main():
     ap.add_argument("--once", action="store_true", help="1회만 체크")
     ap.add_argument("--loop", action="store_true", help="상시 감시 루프")
     ap.add_argument("--test-notify", action="store_true", help="알림 테스트")
+    ap.add_argument("--probe", metavar="URL", help="상품 URL 1개의 재고 판정 근거 출력")
     args = ap.parse_args()
+
+    if args.probe:
+        probe(args.probe)
+        return
 
     cfg = load_config()
     if "CHANGE-ME" in (cfg.get("ntfy") or {}).get("topic", ""):
@@ -437,21 +705,33 @@ def main():
         return
 
     log("상시 감시 시작 (Ctrl+C로 종료)")
+    last_full = 0.0
     while True:
         started = time.time()
+        iv = cfg.get("intervals") or {}
+        hot = in_hot_window(cfg)
+        full_every = iv.get("hot_sec", 30) if hot else iv.get("normal_sec", 300)
+        full = started - last_full >= full_every
         try:
             cfg = load_config()  # 루프 중 config 수정 반영
-            run_cycle(cfg, state)
+            run_cycle(cfg, state, full=full)
+            if full:
+                last_full = started
         except KeyboardInterrupt:
             raise
         except Exception as e:
             log(f"사이클 오류(계속 진행): {e.__class__.__name__}: {e}")
-        iv = cfg.get("intervals") or {}
-        interval = iv.get("hot_sec", 30) if in_hot_window(cfg) else iv.get("normal_sec", 300)
-        elapsed = time.time() - started
-        wait = max(5, interval - elapsed)
-        mode = "🔥집중" if in_hot_window(cfg) else "평상"
-        log(f"[{mode}] {int(wait)}초 후 다음 체크")
+        # 관심 상품은 전체 스캔보다 촘촘하게 돈다 (+랜덤 지터: 일정한 패턴 = 봇 차단 표적)
+        w = cfg.get("watchlist") or {}
+        has_watch = bool(w.get("products")) and w.get("enabled", True)
+        if has_watch:
+            w_hot = hot or in_hot_window(cfg, w.get("hot_windows") or [])
+            interval = w.get("hot_interval_sec", 15) if w_hot else w.get("interval_sec", 45)
+        else:
+            interval = full_every
+        interval *= random.uniform(0.85, 1.25)
+        wait = max(5, interval - (time.time() - started))
+        log(f"[{'🔥집중' if hot else '평상'}] {int(wait)}초 후 다음 체크")
         time.sleep(wait)
 
 

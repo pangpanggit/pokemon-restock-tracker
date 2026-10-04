@@ -82,6 +82,15 @@ header{position:sticky;top:0;z-index:50;background:rgba(13,17,23,.92);backdrop-f
 .rel{font-size:11px;color:var(--dim)}
 .empty{padding:26px;border:1px dashed var(--border);border-radius:14px;color:var(--dim);font-size:13px;text-align:center}
 .count-note{font-size:12px;color:var(--dim);margin-top:8px}
+.shop{font-size:11px;font-weight:700;color:var(--amber)}
+.note{font-size:11px;color:var(--dim)}
+.card.bought{opacity:.45}
+.status.done{background:rgba(88,166,255,.12);color:#79c0ff;border:1px solid #388bfd}
+.site-banner.wl{background:linear-gradient(120deg,rgba(210,153,34,.2),rgba(210,153,34,.04) 60%);border-color:rgba(210,153,34,.5);margin-top:24px}
+.log{width:100%;border-collapse:collapse;font-size:12px}
+.log th,.log td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:left}
+.log th{color:var(--dim);font-weight:600}
+.log td.dur{color:var(--amber);font-weight:700;white-space:nowrap}
 
 /* help */
 .help{margin-top:50px;padding:18px;border:1px solid var(--border);border-radius:14px;background:var(--bg2);font-size:13px;color:var(--dim)}
@@ -105,6 +114,12 @@ footer{margin-top:40px;text-align:center;font-size:12px;color:var(--dim)}
   <div class="notice" id="errNotice"></div>
   <div class="notice" id="staleNotice"></div>
   <div class="stockbar" id="stockbar"></div>
+
+  <!-- 관심 상품 (꼭 살 것) -->
+  <div id="wlWrap" style="display:none">
+    <div class="site-banner wl"><div class="dot" id="wlDot"></div><span class="s-name">🎯 꼭 살 것 (관심 상품)</span><span class="s-stat" id="wlStat"></span></div>
+    <div class="sec" style="margin-top:14px"><div class="grid hero" id="wlGrid"></div></div>
+  </div>
 
   <!-- 30주년 주력 -->
   <div class="sec">
@@ -130,6 +145,12 @@ footer{margin-top:40px;text-align:center;font-size:12px;color:var(--dim)}
   <div class="site-banner wm"><div class="dot" id="wmDot"></div><span class="s-name">✦ Walmart</span><span class="s-stat" id="wmStat"></span></div>
   <div class="sec" style="margin-top:14px"><div class="grid" id="wmGrid"></div><div class="empty" id="wmEmpty" style="display:none">추적 중인 Walmart 상품이 없어요. <b>config.yaml</b>의 walmart → products에 상품 URL을 추가하세요.</div></div>
 
+  <!-- 재입고 기록 -->
+  <div class="sec" id="logWrap" style="display:none">
+    <div class="sec-head"><span class="sec-title">📈 재입고 기록</span><span class="badge">언제 떴고 몇 분 만에 빠졌나 → 집중 시간대 정하는 근거</span></div>
+    <div style="overflow-x:auto"><table class="log"><thead><tr><th>입고 (KST)</th><th>쇼핑몰</th><th>상품</th><th>유지</th></tr></thead><tbody id="logBody"></tbody></table></div>
+  </div>
+
   <div class="help">
     <b>📱 폰으로 알림 받기 (페이지 안 열어놔도 됨!)</b><br>
     1. 폰에 무료 앱 <b>ntfy</b> 설치 (App Store / Play Store)<br>
@@ -152,7 +173,7 @@ function allItems(data){
   const pc=s.pokemoncenter||{};
   for(const [cid,cat] of Object.entries(pc.categories||{}))
     for(const it of (cat.items||[])) out.push({...it, site:'pokemoncenter', cat:cid, key:'pc:'+it.code});
-  for(const site of ['target','walmart'])
+  for(const site of ['target','walmart','watchlist'])
     for(const it of ((s[site]||{}).items||[])) out.push({...it, site, key:site+':'+it.code});
   return out;
 }
@@ -160,15 +181,17 @@ function allItems(data){
 function card(it, hero){
   const st = it.in_stock===true?'in':(it.in_stock===false?'out':'unk');
   const stTxt = st==='in'?'재고 있음':(st==='out'?'SOLD OUT':'확인 불가');
-  const orderTxt = st==='in'?'🛒 바로 주문 →':'상품 페이지 →';
+  const orderTxt = it.bought?'구매 완료 ✓':(st==='in'?'🛒 바로 주문 →':'상품 페이지 →');
   const img = it.img?`<img src="${esc(it.img)}" loading="lazy" onerror="this.parentNode.innerHTML='<span class=noimg>🎴</span>'">`:`<span class="noimg">🎴</span>`;
-  return `<div class="card ${st==='in'?'instock':''}">
+  return `<div class="card ${st==='in'&&!it.bought?'instock':''} ${it.bought?'bought':''}">
     ${it.is_priority?'<span class="star">⭐</span>':''}
     <a class="thumb" href="${esc(it.url)}" target="_blank" rel="noopener">${img}</a>
     <div class="cbody">
+      ${it.shop?`<div class="shop">${esc(it.shop)}</div>`:''}
       <div class="cname">${esc(it.name)}</div>
+      ${it.note?`<div class="note">📝 ${esc(it.note)}</div>`:''}
       ${it.release_date?`<div class="rel">출시 ${esc(it.release_date)}</div>`:''}
-      <div class="crow"><span class="price">${esc(it.price||'')}</span><span class="status ${st}">${stTxt}</span></div>
+      <div class="crow"><span class="price">${esc(it.price||'')}</span>${it.bought?'<span class="status done">구매완료</span>':`<span class="status ${st}" title="${esc(it.signal||'')}">${stTxt}</span>`}</div>
       <a class="order" href="${esc(it.url)}" target="_blank" rel="noopener">${orderTxt}</a>
     </div></div>`;
 }
@@ -198,13 +221,13 @@ function render(){
   const tc=document.getElementById('topicCode'); tc.textContent=DATA.ntfy_topic||'(config에서 설정)';
 
   // hero: 우선(30th) 상품
-  const hero=items.filter(i=>i.is_priority);
+  const hero=items.filter(i=>i.is_priority && i.site!=='watchlist');
   const heroIn=hero.filter(i=>i.in_stock===true).length;
   document.getElementById('heroGrid').innerHTML = hero.length?hero.map(i=>card(i,true)).join(''):'<div class="empty">아직 주력 상품이 없어요</div>';
   document.getElementById('heroBadge').textContent=`${hero.length}개 추적 · 재고 ${heroIn}개`;
 
   // 재고 배너
-  const inNow=items.filter(i=>i.in_stock===true);
+  const inNow=items.filter(i=>i.in_stock===true && !i.bought);
   const bar=document.getElementById('stockbar');
   if(inNow.length){bar.classList.add('show');bar.innerHTML=`🟢 지금 <b>${inNow.length}개</b> 상품 재고 있음! ${inNow.slice(0,3).map(i=>`<a style="text-decoration:underline" href="${esc(i.url)}" target="_blank">${esc(i.name.slice(0,38))}…</a>`).join(' · ')}`}
   else bar.classList.remove('show');
@@ -223,6 +246,28 @@ function render(){
   setSite('pc', pc);
   setSite('tg', (DATA.sites||{}).target||{}, 'tgGrid','tgEmpty');
   setSite('wm', (DATA.sites||{}).walmart||{}, 'wmGrid','wmEmpty');
+
+  // 관심 상품: 재고 있음 → 꼭 살 것 → 나머지 → 구매완료 순
+  const wl=(DATA.sites||{}).watchlist;
+  document.getElementById('wlWrap').style.display=wl&&(wl.items||[]).length?'block':'none';
+  if(wl){
+    const rank=i=>i.bought?3:(i.in_stock===true?0:(i.must?1:2));
+    const its=(wl.items||[]).slice().sort((a,b)=>rank(a)-rank(b));
+    document.getElementById('wlGrid').innerHTML=its.map(i=>card(i,true)).join('');
+    const left=its.filter(i=>!i.bought).length;
+    setSite('wl', wl);
+    document.getElementById('wlStat').innerHTML=`남은 ${left}개 · 구매완료 ${its.length-left}개<br>`+(wl.checked_at?'체크 '+fmtTime(wl.checked_at):'');
+  }
+
+  // 재입고 기록
+  const lg=(DATA.restock_log||[]).slice().reverse();
+  document.getElementById('logWrap').style.display=lg.length?'block':'none';
+  document.getElementById('logBody').innerHTML=lg.slice(0,40).map(e=>{
+    const a=new Date(e.in_at), b=e.out_at?new Date(e.out_at):null;
+    const t=a.toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'});
+    const dur=b?Math.max(1,Math.round((b-a)/60000))+'분 이내':'재고 유지 중';
+    return `<tr><td>${esc(t)}</td><td>${esc(e.shop||'')}</td><td><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc((e.name||'').slice(0,50))}</a></td><td class="dur">${dur}</td></tr>`;
+  }).join('');
 }
 
 function setSite(pfx, s, gridId, emptyId){
@@ -265,7 +310,7 @@ function fireAlerts(items){
   const restocked=[];
   for(const it of items){
     const was=prevStock[it.key];
-    if(it.in_stock===true && was!==true && !firstLoad) restocked.push(it);
+    if(it.in_stock===true && was!==true && !firstLoad && !it.bought) restocked.push(it);
     prevStock[it.key]=it.in_stock;
   }
   if(restocked.length && !firstLoad){

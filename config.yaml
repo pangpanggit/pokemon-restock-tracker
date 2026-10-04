@@ -18,6 +18,38 @@ dashboard:
   # 배포 후 본인 GitHub Pages 주소로 변경 (알림 클릭 시 열릴 링크)
   url: "https://pangpanggit.github.io/pokemon-restock-tracker/"
 
+# ---- 🎯 관심 상품 (꼭 살 것) ---------------------------------
+# 국내외 아무 쇼핑몰 상품 URL이나 넣으면 됩니다 (스마트스토어, 쿠팡, 11번가,
+# 포켓몬센터 등). 전체 스캔보다 훨씬 촘촘하게(기본 45초, 집중시간 15초) 돕니다.
+#
+# 새 상품 넣을 때마다 꼭 한 번:  python check.py --probe "상품URL"
+#   → 품절 상태에서 '품절'로 판정되는지 확인. 엉뚱한 문구에 걸리면
+#     sold_out_text / in_stock_text 로 판정 기준을 고정하세요.
+watchlist:
+  enabled: true
+  interval_sec: 45          # 평상시 관심상품 체크 간격
+  hot_interval_sec: 15      # 집중 시간대 간격
+  # 관심상품 전용 집중 시간대 (KST). intervals.hot_windows(미국 몰 시간)에도 같이 집중함.
+  # 국내 몰은 업무시간 오픈/재고반영이 많아 우선 아래로 시작 →
+  # 대시보드 '재입고 기록'이 쌓이면 실제 뜬 시간대로 고치세요.
+  hot_windows:
+    - "09:50-11:30"
+    - "13:50-15:30"
+    - "19:50-20:30"
+  gap_sec: 1.5              # 상품 사이 간격 (같은 사이트 연타 방지)
+  open_browser: true        # 재고 뜨면 체커 PC 브라우저에서 상품 페이지 자동 오픈
+  repeat_alert_minutes: 2   # 재고가 남아있는 동안 N분마다 재알림 (0 = 끔)
+  notify_on_change: true    # 판정은 그대로인데 페이지 신호가 바뀌면 '👀 변화 감지' 알림
+  products: []
+    # - name: "상품 이름 (알아보기 쉽게)"
+    #   url: "https://smartstore.naver.com/xxxx/products/1234567890"
+    #   must: true            # true = 꼭 살 것 (최우선 알림 + 재알림)
+    #   bought: false         # 샀으면 true → 알림 중지
+    #   note: "1인 2개 제한, 네이버페이"   # 대시보드에 메모로 표시
+    #   # 판정이 틀릴 때만 (페이지 문구 그대로, 대소문자 무시):
+    #   # sold_out_text: ["일시품절"]
+    #   # in_stock_text: ["구매하기"]
+
 # ---- Pokémon Center -----------------------------------------
 pokemoncenter:
   enabled: true
